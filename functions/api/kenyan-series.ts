@@ -9,7 +9,12 @@ interface SupabaseConfig {
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
   status,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  },
 })
 
 const getConfig = (env: Env): SupabaseConfig => ({
@@ -110,6 +115,15 @@ export async function onRequest(context: { request: Request; env: Env }) {
   const config = getConfig(env)
 
   try {
+    // Handle CORS preflight requests
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }})
+    }
+
     if (request.method === 'GET') {
       let isAdmin = false
       if (wantsAdmin) {
