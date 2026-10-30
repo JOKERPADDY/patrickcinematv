@@ -64,6 +64,30 @@ describe('LiveMatches', () => {
     })
   })
 
+  it('links Streamfree live events to their embedded player', async () => {
+    vi.spyOn(sportsApi, 'getLiveMatches').mockResolvedValue([
+      {
+        id: 'ghana-vs-england',
+        title: 'Ghana vs England',
+        homeTeam: 'Ghana',
+        awayTeam: 'England',
+        score: 'LIVE',
+        time: 'Live',
+        league: 'FIFA World Cup',
+        sport: 'soccer',
+        streamKey: 'ghana-vs-england',
+        streamSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
+        liveSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
+      },
+    ])
+
+    renderWithRouter(<LiveMatches />)
+
+    const link = await screen.findByRole('link', { name: /Ghana vs England/i })
+    expect(link).toHaveAttribute('href', '/sports/live/ghana-vs-england')
+    expect(screen.getByText('FHD')).toBeInTheDocument()
+  })
+
   it('renders error state on fetch failure', async () => {
     vi.spyOn(sportsApi, 'getLiveMatches').mockRejectedValue(new Error('Network error'))
     
@@ -130,6 +154,33 @@ describe('LiveMatches', () => {
     expect(await screen.findByText('Team A')).toBeInTheDocument()
     const upcomingBadges = await screen.findAllByText('UPCOMING')
     expect(upcomingBadges.length).toBeGreaterThan(0)
+  })
+
+  it('links upcoming Streamfree matches to their quality-selectable player', async () => {
+    vi.spyOn(sportsApi, 'getUpcomingMatches').mockResolvedValue([
+      {
+        id: 'ghana-vs-england',
+        title: 'Ghana vs England',
+        homeTeam: 'Ghana',
+        awayTeam: 'England',
+        score: 'vs',
+        time: '11:00 PM',
+        league: 'FIFA World Cup',
+        sport: 'soccer',
+        streamKey: 'ghana-vs-england',
+        streamSources: [
+          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
+          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
+        ],
+        liveSources: [],
+      },
+    ])
+
+    renderWithRouter(<LiveMatches variant="upcoming" />)
+
+    const link = await screen.findByRole('link', { name: /Ghana vs England/i })
+    expect(link).toHaveAttribute('href', '/sports/upcoming/ghana-vs-england')
+    expect(screen.getByText('FHD · SD')).toBeInTheDocument()
   })
 
   it('displays LIVE badge for live matches', async () => {

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SportsPlayer from './SportsPlayer'
@@ -11,6 +11,7 @@ vi.mock('../api/sports', async () => {
     sportsApi: {
       ...actual.sportsApi,
       getStreams: vi.fn(),
+      getLiveSources: vi.fn(),
     },
   }
 })
@@ -27,16 +28,18 @@ vi.mock('../hooks/useToast', () => ({
 }))
 
 const mockedGetStreams = vi.mocked(sportsApi.getStreams)
+const mockedGetLiveSources = vi.mocked(sportsApi.getLiveSources)
 
 describe('SportsPlayer', () => {
   beforeEach(() => {
     mockedGetStreams.mockReset()
+    mockedGetLiveSources.mockReset()
     Object.values(mockToast).forEach((fn) => fn.mockReset())
   })
 
   it('renders a safe fallback when navigation leaves no streams selected', async () => {
-    mockedGetStreams
-      .mockResolvedValueOnce([
+    mockedGetStreams.mockImplementation(async (_source, streamId) => streamId === '123'
+      ? [
         {
           id: 'stream-1',
           streamNo: 1,
@@ -53,8 +56,8 @@ describe('SportsPlayer', () => {
           embedUrl: 'https://example.com/2',
           source: 'alpha',
         },
-      ])
-      .mockResolvedValueOnce([])
+      ]
+      : [])
 
     const router = createMemoryRouter(
       [{ path: '/sports/:source/:id', element: <SportsPlayer /> }],
@@ -71,10 +74,45 @@ describe('SportsPlayer', () => {
       expect(screen.getByRole('button', { name: /Spanish HD/i })).toHaveClass('bg-primary')
     })
 
-    await router.navigate('/sports/beta/456')
+    await act(async () => {
+      await router.navigate('/sports/beta/456')
+    })
 
     await waitFor(() => {
       expect(screen.getByText(/No streams available/i)).toBeInTheDocument()
     })
+  })
+
+  it('embeds a live source without sandboxing and offers its quality variant', async () => {
+    mockedGetLiveSources.mockResolvedValue([
+      {
+        quality: 'FHD',
+        url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p',
+      },
+      {
+        quality: 'SD',
+        url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p',
+      },
+    ])
+
+    const router = createMemoryRouter(
+      [{ path: '/sports/:source/:id', element: <SportsPlayer /> }],
+      { initialEntries: ['/sports/live/ghana-vs-england'] },
+    )
+
+    const { container } = render(<RouterProvider router={router} />)
+
+    expect(await screen.findByText('2 live quality options')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(container.querySelector('iframe')).toHaveAttribute(
+        'src',
+        'https://strmfree.st/embed/soccer/ghana-vs-england1080p',
+      )
+    })
+    const playerIframe = container.querySelector('iframe')
+    expect(playerIframe).not.toHaveAttribute('sandbox')
+    expect(playerIframe).toHaveAttribute('allowfullscreen')
+    expect(playerIframe).toHaveAttribute('allow', expect.stringContaining('picture-in-picture'))
+    expect(screen.getAllByText('FHD').length).toBeGreaterThan(0)
   })
 })

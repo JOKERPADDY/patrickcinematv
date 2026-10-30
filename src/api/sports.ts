@@ -3,6 +3,8 @@ import axios from 'axios'
 const IS_PRODUCTION = import.meta.env.PROD || import.meta.env.MODE === 'production'
 const STREAMED_API_BASE = 'https://streamed.pk/api'
 const SPORTS_API_BASE = IS_PRODUCTION ? '/api/sports' : STREAMED_API_BASE
+const STREAMFREE_API_BASE = 'https://streamfree.top/api/v1'
+const LIVE_MATCHES_CACHE_TTL = 60_000
 
 export interface Stream {
   id: string
@@ -11,8 +13,14 @@ export interface Stream {
   hd: boolean
   embedUrl: string
   source: string
+  quality?: string
   thumbnail?: string
   healthScore?: number
+}
+
+export interface LiveSportsSource {
+  quality: string
+  url: string
 }
 
 export interface MatchSource {
@@ -33,19 +41,71 @@ export interface Match {
   poster?: string
   date?: number
   sources?: MatchSource[]
+  streamKey?: string
+  streamSources?: LiveSportsSource[]
+  liveSources?: LiveSportsSource[]
 }
 
-interface StreamedMatch {
-  id: string
-  title: string
-  category?: string
-  date?: number
-  poster?: string
-  teams?: {
-    home?: { name?: string }
-    away?: { name?: string }
+interface StreamfreeMatch {
+  name: string
+  category: string
+  league?: string
+  stream_key: string
+  match_timestamp?: number
+  sources: LiveSportsSource[]
+  live_sources: LiveSportsSource[]
+  thumbnail_url?: string
+}
+
+const liveMatchesCache = new Map<string, { expiresAt: number; matches: Match[]; pending?: Promise<Match[]> }>()
+
+function isLiveSportsSource(value: unknown): value is LiveSportsSource {
+  if (!value || typeof value !== 'object') return false
+
+  const source = value as Record<string, unknown>
+  if (typeof source.quality !== 'string' || typeof source.url !== 'string') return false
+
+  try {
+    const url = new URL(source.url)
+    return url.protocol === 'https:' || url.protocol === 'http:'
+  } catch {
+    return false
   }
-  sources?: MatchSource[]
+}
+
+function normalizeStreamfreeMatch(value: unknown): Match | null {
+  if (!value || typeof value !== 'object') return null
+  const match = value as Partial<StreamfreeMatch>
+
+  if (typeof match.name !== 'string' || typeof match.category !== 'string' ||
+      typeof match.stream_key !== 'string' || !Array.isArray(match.sources) ||
+      !Array.isArray(match.live_sources)) {
+    return null
+  }
+
+  const streamSources = match.sources.filter(isLiveSportsSource)
+  const liveSources = match.live_sources.filter(isLiveSportsSource)
+  if (streamSources.length === 0) return null
+
+  const [homeTeam, awayTeam] = match.name.split(/\s+vs\.?\s+/i)
+  const timestamp = typeof match.match_timestamp === 'number' ? match.match_timestamp * 1000 : undefined
+
+  return {
+    id: match.stream_key,
+    title: match.name,
+    homeTeam: homeTeam || match.name,
+    awayTeam: awayTeam || '',
+    league: match.league || match.category.toUpperCase(),
+    status: 'LIVE',
+    time: timestamp ? getMatchTime(timestamp, timestamp > Date.now()) : 'Live',
+    score: liveSources.length > 0 ? 'LIVE' : 'vs',
+    sport: match.category,
+    poster: match.thumbnail_url || getFallbackSportImage(match.category),
+    date: timestamp,
+    streamKey: match.stream_key,
+    streamSources,
+    liveSources,
+  }
 }
 
 function getMatchTime(date?: number, showDate = false): string {
@@ -95,81 +155,82 @@ function getFallbackSportImage(sport: string): string {
   return sportImages[sport.toLowerCase()] || LOCAL_FALLBACK_IMAGE
 }
 
-function normalizeMatch(match: StreamedMatch, status: 'LIVE' | 'UPCOMING' = 'LIVE'): Match {
-  const [fallbackHome, fallbackAway] = match.title.split(/\s+vs\s+/i)
-  const homeTeam = match.teams?.home?.name || fallbackHome || match.title
-  const awayTeam = match.teams?.away?.name || fallbackAway || 'Opponent'
-  const sport = match.category || 'sports'
-
-  return {
-    id: match.id,
-    title: match.title,
-    homeTeam,
-    awayTeam,
-    league: sport.toUpperCase(),
-    status,
-    time: getMatchTime(match.date, status === 'UPCOMING'),
-    score: 'vs',
-    sport,
-    poster: normalizeSportsPosterUrl(match.poster) || getFallbackSportImage(sport),
-    date: match.date,
-    sources: match.sources || [],
-  }
-}
-
 export const sportsApi = {
-  async getLiveMatches(): Promise<Match[]> {
-    try {
-      if (!IS_PRODUCTION) {
-        console.log('Fetching live matches from:', `${SPORTS_API_BASE}/matches/live`)
-      }
-      const response = await axios.get(`${SPORTS_API_BASE}/matches/live`, {
-        timeout: 10000,
-      })
-      if (!IS_PRODUCTION) {
-        console.log('Live matches response:', response.data)
-      }
-      return Array.isArray(response.data)
-        ? response.data.map((match: StreamedMatch) => normalizeMatch(match))
-        : []
-    } catch (error) {
-      console.error('Error fetching live matches:', error)
-      if (axios.isAxiosError(error)) {
-        console.error('Axios error details:', {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-        })
-      }
-      // Return mock data as fallback
-      return this.getMockMatches()
+  async getStreamfreeMatches(category?: string): Promise<Match[]> {
+    const cacheKey = category || 'all'
+    let cachedMatches = liveMatchesCache.get(cacheKey)
+    if (cachedMatches && cachedMatches.expiresAt > Date.now()) {
+      if (cachedMatches.pending) return cachedMatches.pending
+      return cachedMatches.matches
     }
+
+    const pending = (async () => {
+      try {
+        const response = await axios.get(`${STREAMFREE_API_BASE}/streams`, {
+          params: category ? { category } : undefined,
+          timeout: 10000,
+        })
+
+        const data: unknown = response.data
+        if (!data || typeof data !== 'object' || !Array.isArray((data as { streams?: unknown }).streams)) {
+          throw new Error('The live sports API returned an invalid stream list.')
+        }
+
+        const matches = (data as { streams: unknown[] }).streams
+          .map(normalizeStreamfreeMatch)
+          .filter((match): match is Match => match !== null)
+        liveMatchesCache.set(cacheKey, { matches, expiresAt: Date.now() + LIVE_MATCHES_CACHE_TTL })
+        return matches
+      } catch (error) {
+        liveMatchesCache.delete(cacheKey)
+        console.error('Error fetching Streamfree sports matches:', error)
+        throw error
+      }
+    })()
+
+    liveMatchesCache.set(cacheKey, {
+      matches: cachedMatches?.matches || [],
+      expiresAt: Date.now() + LIVE_MATCHES_CACHE_TTL,
+      pending,
+    })
+    return pending
+  },
+
+  async getLiveMatches(category?: string): Promise<Match[]> {
+    const matches = await this.getStreamfreeMatches(category)
+    const now = Date.now()
+    return matches.filter(
+      (match) => (match.liveSources?.length || 0) > 0 && (!match.date || match.date <= now),
+    )
+  },
+
+  async getLiveSources(streamKey: string): Promise<LiveSportsSource[]> {
+    const response = await axios.get(
+      `${STREAMFREE_API_BASE}/sources/${encodeURIComponent(streamKey)}`,
+      { timeout: 10000 },
+    )
+    const data: unknown = response.data
+
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      !Array.isArray((data as { sources?: unknown }).sources) ||
+      !Array.isArray((data as { live_sources?: unknown }).live_sources)
+    ) {
+      throw new Error('The live sports API returned an invalid source list.')
+    }
+
+    const sources = (data as { sources: unknown[] }).sources.filter(isLiveSportsSource)
+    const liveSources = (data as { live_sources: unknown[] }).live_sources.filter(isLiveSportsSource)
+    return liveSources.length > 0 ? liveSources : sources
   },
 
   async getUpcomingMatches(): Promise<Match[]> {
-    try {
-      if (!IS_PRODUCTION) {
-        console.log('Fetching upcoming matches from:', `${SPORTS_API_BASE}/matches/all`)
-      }
-      const response = await axios.get(`${SPORTS_API_BASE}/matches/all`, {
-        timeout: 10000,
-      })
-      const now = Date.now()
-
-      return Array.isArray(response.data)
-        ? response.data
-            .filter((match: StreamedMatch) => match.date && match.date > now)
-            .sort((a: StreamedMatch, b: StreamedMatch) => (a.date || 0) - (b.date || 0))
-            .map((match: StreamedMatch) => normalizeMatch(match, 'UPCOMING'))
-        : []
-    } catch (error) {
-      console.error('Error fetching upcoming matches:', error)
-      return this.getMockMatches().map((match) => ({
-        ...match,
-        status: 'UPCOMING',
-        time: 'Soon',
-      }))
-    }
+    const matches = await this.getStreamfreeMatches()
+    const now = Date.now()
+    return matches
+      .filter((match) => match.date && match.date > now)
+      .sort((a, b) => (a.date || 0) - (b.date || 0))
   },
 
   async getStreams(source: string, id: string): Promise<Stream[]> {
@@ -280,6 +341,8 @@ export const sportsApi = {
 export const getLiveMatches = (...args: Parameters<typeof sportsApi.getLiveMatches>) => sportsApi.getLiveMatches(...args)
 export const getUpcomingMatches = (...args: Parameters<typeof sportsApi.getUpcomingMatches>) => sportsApi.getUpcomingMatches(...args)
 export const getStreams = (...args: Parameters<typeof sportsApi.getStreams>) => sportsApi.getStreams(...args)
+export const getLiveSources = (...args: Parameters<typeof sportsApi.getLiveSources>) => sportsApi.getLiveSources(...args)
+export const getStreamfreeMatches = (...args: Parameters<typeof sportsApi.getStreamfreeMatches>) => sportsApi.getStreamfreeMatches(...args)
 export const getStreamUrl = (source: string, id: string) => sportsApi.getStreamUrl(source, id)
 export const sources = sportsApi.sources
 export const getMockMatches = () => sportsApi.getMockMatches()

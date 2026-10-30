@@ -8,12 +8,17 @@ interface SportsFiltersProps {
 export default function SportsFilters({ selectedSport, onSportChange }: SportsFiltersProps) {
   const sports = [
     { id: 'all', name: 'All Sports', icon: Trophy },
+    { id: 'soccer', name: 'Soccer', icon: Trophy },
     { id: 'football', name: 'Football', icon: Trophy },
     { id: 'afl', name: 'AFL', icon: Trophy },
     { id: 'rugby', name: 'Rugby', icon: Trophy },
     { id: 'basketball', name: 'NBA', icon: Circle },
+    { id: 'hockey', name: 'Hockey', icon: Circle },
+    { id: 'combat', name: 'Combat', icon: Flame },
+    { id: 'baseball', name: 'Baseball', icon: Circle },
     { id: 'ufc', name: 'UFC', icon: Flame },
     { id: 'tennis', name: 'Tennis', icon: Circle },
+    { id: 'racing', name: 'Racing', icon: Flag },
     { id: 'motorsports', name: 'F1', icon: Flag },
     { id: 'cricket', name: 'Cricket', icon: Trophy },
   ]

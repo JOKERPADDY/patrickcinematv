@@ -22,6 +22,9 @@ export default function SportsPlayer() {
   }
   const { source, id, matchId } = useParams()
   const location = useLocation()
+  const streamId = id || matchId
+  const isStreamfreeMatch = source === 'live' || source === 'upcoming'
+  const isUpcomingStreamfreeMatch = source === 'upcoming'
   const [streams, setStreams] = useState<Stream[]>([])
   const [selectedStream, setSelectedStream] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -172,7 +175,6 @@ export default function SportsPlayer() {
     async function fetchStreams() {
       // Handle both route patterns: /sports/:source/:id and /sports/:matchId
       const streamSource = source || 'alpha' // default source if not provided
-      const streamId = id || matchId
 
       if (!streamId) {
         setStreams([])
@@ -185,8 +187,17 @@ export default function SportsPlayer() {
       try {
         setFetchError(null)
         setLoading(true)
-        const data = await sportsApi.getStreams(streamSource, streamId)
-        const normalizedStreams = Array.isArray(data) ? data : []
+        const normalizedStreams: Stream[] = isStreamfreeMatch
+          ? (await sportsApi.getLiveSources(streamId)).map((liveSource, index) => ({
+              id: `${streamId}-${liveSource.quality}-${index}`,
+              streamNo: index + 1,
+              language: '',
+              hd: liveSource.quality !== 'SD',
+              embedUrl: liveSource.url,
+              source: 'streamfree',
+              quality: liveSource.quality,
+            }))
+          : await sportsApi.getStreams(streamSource, streamId)
         setStreams(normalizedStreams)
 
         // Auto-select best stream by health score when available
@@ -206,7 +217,11 @@ export default function SportsPlayer() {
         }
 
         if (normalizedStreams.length === 0) {
-          setFetchError('No streams available for this match right now.')
+          setFetchError(
+            isStreamfreeMatch
+              ? 'This event has no live source right now. Please try again later.'
+              : 'No streams available for this match right now.',
+          )
         }
         setLoading(false)
       } catch (error) {
@@ -231,7 +246,7 @@ export default function SportsPlayer() {
         iframeRef.current.src = 'about:blank'
       }
     }
-  }, [source, id, matchId, directStreamUrl, directStreamChannelName, retryCount, toastError])
+  }, [source, streamId, isStreamfreeMatch, directStreamUrl, directStreamChannelName, retryCount, toastError])
 
 
 
@@ -297,10 +312,16 @@ export default function SportsPlayer() {
               </button>
               <div className="min-w-0">
                 <h1 className="truncate text-base font-semibold tracking-tight text-white sm:text-2xl">
-                  {directStream ? directStream.name : 'Live Match'}
+                  {directStream ? directStream.name : isStreamfreeMatch ? streamId : 'Live Match'}
                 </h1>
                 <p className="mt-0.5 text-xs text-gray-400 sm:mt-1 sm:text-sm">
-                  {directStream ? 'Live TV Channel' : `Stream ${selectedStream + 1} of ${streams.length}`}
+                  {directStream
+                    ? 'Live TV Channel'
+                    : isStreamfreeMatch
+                      ? isUpcomingStreamfreeMatch
+                        ? `${streams.length} quality option${streams.length === 1 ? '' : 's'}`
+                        : `${streams.length} live quality${streams.length === 1 ? '' : ' options'}`
+                      : `Stream ${selectedStream + 1} of ${streams.length}`}
                 </p>
               </div>
             </div>
@@ -379,7 +400,8 @@ export default function SportsPlayer() {
                   transition: 'transform 0.3s ease',
                 }}
                 frameBorder="0"
-                allow="autoplay; encrypted-media"
+                allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+                allowFullScreen
               />
             </div>
           </div>
@@ -405,7 +427,7 @@ export default function SportsPlayer() {
                         : 'border-white/10 bg-black/20 text-gray-300 hover:border-white/20 hover:bg-white/10'
                     }`}
                   >
-                    <div className="flex-shrink-0 w-10 h-6 bg-gray-800 rounded-sm flex items-center justify-center text-xs text-gray-200">{s.hd ? 'HD' : 'SD'}</div>
+                    <div className="flex-shrink-0 w-10 h-6 bg-gray-800 rounded-sm flex items-center justify-center text-xs text-gray-200">{s.quality || (s.hd ? 'HD' : 'SD')}</div>
                     <div className="truncate">{s.language || `Stream ${s.streamNo}`}</div>
                   </button>
                 ))
@@ -441,7 +463,7 @@ export default function SportsPlayer() {
                         >
                           <div className="flex items-center gap-2">
                             <Radio className="h-4 w-4 flex-shrink-0" />
-                            <span className="truncate">{stream.language || `Stream ${stream.streamNo}`}{stream.hd ? ' · HD' : ''}</span>
+                            <span className="truncate">{stream.quality || stream.language || `Stream ${stream.streamNo}`}{!stream.quality && stream.hd ? ' · HD' : ''}</span>
                           </div>
                         </button>
                       ))}
@@ -537,8 +559,8 @@ export default function SportsPlayer() {
                             <div className="flex items-center gap-2">
                               <Radio className="h-4 w-4 flex-shrink-0" />
                               <span className="truncate">
-                                {stream.language || `Stream ${stream.streamNo}`}
-                                {stream.hd && ' HD'}
+                                {stream.quality || stream.language || `Stream ${stream.streamNo}`}
+                                {!stream.quality && stream.hd && ' HD'}
                               </span>
                             </div>
                           </button>
@@ -553,7 +575,7 @@ export default function SportsPlayer() {
         )}
 
         {/* Stream Info - only show for sports API streams */}
-        {!directStream && (
+        {!directStream && !isStreamfreeMatch && (
           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-2.5 shadow-sm sm:p-4">
             <h2 className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-gray-300 sm:mb-3 sm:text-sm">Stream Information</h2>
             <div className="flex items-center justify-between mb-3">
@@ -579,7 +601,7 @@ export default function SportsPlayer() {
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-gray-400">Quality</p>
-                <p className="mt-1 font-semibold text-white">{currentStream.hd ? 'HD' : 'SD'}</p>
+                <p className="mt-1 font-semibold text-white">{currentStream.quality || (currentStream.hd ? 'HD' : 'SD')}</p>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-gray-400">Source</p>

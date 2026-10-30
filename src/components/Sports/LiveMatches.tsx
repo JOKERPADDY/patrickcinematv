@@ -52,7 +52,7 @@ export default function LiveMatches({ limit, sport, variant = 'live' }: LiveMatc
         setFetchError(null)
         const data = variant === 'upcoming'
           ? await getUpcomingMatches()
-          : await getLiveMatches()
+          : await getLiveMatches(sport && sport !== 'all' ? sport : undefined)
         let filteredMatches = data
         
         if (sport && sport !== 'all') {
@@ -118,9 +118,15 @@ export default function LiveMatches({ limit, sport, variant = 'live' }: LiveMatc
         // Use the first available source if available
         const firstSource = match.sources && match.sources.length > 0 ? match.sources[0] : null
         const isLive = variant === 'live'
+        const matchPath = match.streamKey
+          ? `/sports/${variant === 'upcoming' ? 'upcoming' : 'live'}/${encodeURIComponent(match.streamKey)}`
+          : firstSource
+            ? `/sports/${firstSource.source}/${firstSource.id}`
+            : `/sports/${match.id}`
         const matchKey = [
           variant,
           match.id,
+          match.streamKey,
           firstSource?.source,
           firstSource?.id,
           match.date,
@@ -130,7 +136,7 @@ export default function LiveMatches({ limit, sport, variant = 'live' }: LiveMatc
         return (
           <Link
             key={matchKey}
-            to={firstSource ? `/sports/${firstSource.source}/${firstSource.id}` : `/sports/${match.id}`}
+            to={matchPath}
             className="group glass rounded-xl overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-glow backdrop-blur-md active:scale-95 hover:-translate-y-1"
           >
             {/* Image Container with Thumbnail */}
@@ -180,19 +186,30 @@ export default function LiveMatches({ limit, sport, variant = 'live' }: LiveMatc
               <p className="text-sm text-gray-400 mb-3 truncate font-semibold">{match.league}</p>
               
               {/* Teams vs Score */}
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate">{match.homeTeam}</p>
+              {match.streamKey ? (
+                <div className="mb-3">
+                  <p className="text-sm font-bold text-white truncate">{match.title}</p>
+                  {match.streamSources && (
+                    <p className="mt-1 text-xs font-semibold text-primary">
+                      {match.streamSources.map((source) => source.quality).join(' · ')}
+                    </p>
+                  )}
                 </div>
-                <div className="flex-shrink-0 text-center">
-                  <p className="text-base font-extrabold bg-gradient-to-r from-primary to-red-600 bg-clip-text text-transparent">
-                    {match.score}
-                  </p>
+              ) : (
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate">{match.homeTeam}</p>
+                  </div>
+                  <div className="flex-shrink-0 text-center">
+                    <p className="text-base font-extrabold bg-gradient-to-r from-primary to-red-600 bg-clip-text text-transparent">
+                      {match.score}
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white truncate text-right">{match.awayTeam}</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-white truncate text-right">{match.awayTeam}</p>
-                </div>
-              </div>
+              )}
 
               {/* Time */}
               <div className="flex items-center gap-1.5 text-sm text-gray-400 mb-3">
