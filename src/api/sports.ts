@@ -5,6 +5,17 @@ const STREAMED_API_BASE = 'https://streamed.pk/api'
 const SPORTS_API_BASE = IS_PRODUCTION ? '/api/sports' : STREAMED_API_BASE
 const STREAMFREE_API_BASE = 'https://streamfree.top/api/v1'
 const LIVE_MATCHES_CACHE_TTL = 60_000
+export const DEFAULT_SPORTS_CATEGORIES = [
+  'soccer',
+  'basketball',
+  'hockey',
+  'combat',
+  'baseball',
+  'football',
+  'racing',
+  'tennis',
+  'cricket',
+] as const
 
 export interface Stream {
   id: string
@@ -21,6 +32,7 @@ export interface Stream {
 export interface LiveSportsSource {
   quality: string
   url: string
+  live: boolean
 }
 
 export interface MatchSource {
@@ -53,7 +65,6 @@ interface StreamfreeMatch {
   stream_key: string
   match_timestamp?: number
   sources: LiveSportsSource[]
-  live_sources: LiveSportsSource[]
   thumbnail_url?: string
 }
 
@@ -63,7 +74,11 @@ function isLiveSportsSource(value: unknown): value is LiveSportsSource {
   if (!value || typeof value !== 'object') return false
 
   const source = value as Record<string, unknown>
-  if (typeof source.quality !== 'string' || typeof source.url !== 'string') return false
+  if (
+    typeof source.quality !== 'string' ||
+    typeof source.url !== 'string' ||
+    typeof source.live !== 'boolean'
+  ) return false
 
   try {
     const url = new URL(source.url)
@@ -78,14 +93,12 @@ function normalizeStreamfreeMatch(value: unknown): Match | null {
   const match = value as Partial<StreamfreeMatch>
 
   if (typeof match.name !== 'string' || typeof match.category !== 'string' ||
-      typeof match.stream_key !== 'string' || !Array.isArray(match.sources) ||
-      !Array.isArray(match.live_sources)) {
+      typeof match.stream_key !== 'string' || !Array.isArray(match.sources)) {
     return null
   }
 
   const streamSources = match.sources.filter(isLiveSportsSource)
-  const liveSources = match.live_sources.filter(isLiveSportsSource)
-  if (streamSources.length === 0) return null
+  const liveSources = streamSources.filter((source) => source.live)
 
   const [homeTeam, awayTeam] = match.name.split(/\s+vs\.?\s+/i)
   const timestamp = typeof match.match_timestamp === 'number' ? match.match_timestamp * 1000 : undefined
@@ -156,6 +169,19 @@ function getFallbackSportImage(sport: string): string {
 }
 
 export const sportsApi = {
+  async getCategories(): Promise<string[]> {
+    const response = await axios.get(`${STREAMFREE_API_BASE}/categories`, { timeout: 10000 })
+    const data: unknown = response.data
+
+    if (!data || typeof data !== 'object' || !Array.isArray((data as { categories?: unknown }).categories)) {
+      throw new Error('The live sports API returned an invalid category list.')
+    }
+
+    const categories = (data as { categories: unknown[] }).categories
+      .filter((category): category is string => typeof category === 'string' && category.length > 0)
+    return categories.length > 0 ? categories : [...DEFAULT_SPORTS_CATEGORIES]
+  },
+
   async getStreamfreeMatches(category?: string): Promise<Match[]> {
     const cacheKey = category || 'all'
     let cachedMatches = liveMatchesCache.get(cacheKey)
@@ -198,13 +224,10 @@ export const sportsApi = {
 
   async getLiveMatches(category?: string): Promise<Match[]> {
     const matches = await this.getStreamfreeMatches(category)
-    const now = Date.now()
-    return matches.filter(
-      (match) => (match.liveSources?.length || 0) > 0 && (!match.date || match.date <= now),
-    )
+    return matches.filter((match) => (match.liveSources?.length || 0) > 0)
   },
 
-  async getLiveSources(streamKey: string): Promise<LiveSportsSource[]> {
+  async getSources(streamKey: string): Promise<LiveSportsSource[]> {
     const response = await axios.get(
       `${STREAMFREE_API_BASE}/sources/${encodeURIComponent(streamKey)}`,
       { timeout: 10000 },
@@ -214,22 +237,30 @@ export const sportsApi = {
     if (
       !data ||
       typeof data !== 'object' ||
-      !Array.isArray((data as { sources?: unknown }).sources) ||
-      !Array.isArray((data as { live_sources?: unknown }).live_sources)
+      !Array.isArray((data as { sources?: unknown }).sources)
     ) {
       throw new Error('The live sports API returned an invalid source list.')
     }
 
-    const sources = (data as { sources: unknown[] }).sources.filter(isLiveSportsSource)
-    const liveSources = (data as { live_sources: unknown[] }).live_sources.filter(isLiveSportsSource)
-    return liveSources.length > 0 ? liveSources : sources
+    const sources = (data as { sources: unknown[] }).sources
+    const validSources = sources.filter(isLiveSportsSource)
+    if (validSources.length !== sources.length) {
+      throw new Error('The live sports API returned an invalid source list.')
+    }
+
+    return validSources
+  },
+
+  async getLiveSources(streamKey: string): Promise<LiveSportsSource[]> {
+    const sources = await this.getSources(streamKey)
+    return sources.filter((source) => source.live)
   },
 
   async getUpcomingMatches(): Promise<Match[]> {
     const matches = await this.getStreamfreeMatches()
     const now = Date.now()
     return matches
-      .filter((match) => match.date && match.date > now)
+      .filter((match) => match.date && match.date > now && (match.liveSources?.length || 0) === 0)
       .sort((a, b) => (a.date || 0) - (b.date || 0))
   },
 
@@ -340,8 +371,10 @@ export const sportsApi = {
 // Backwards-compatible named exports for tests and callers that import * as sportsApi
 export const getLiveMatches = (...args: Parameters<typeof sportsApi.getLiveMatches>) => sportsApi.getLiveMatches(...args)
 export const getUpcomingMatches = (...args: Parameters<typeof sportsApi.getUpcomingMatches>) => sportsApi.getUpcomingMatches(...args)
+export const getCategories = (...args: Parameters<typeof sportsApi.getCategories>) => sportsApi.getCategories(...args)
 export const getStreams = (...args: Parameters<typeof sportsApi.getStreams>) => sportsApi.getStreams(...args)
 export const getLiveSources = (...args: Parameters<typeof sportsApi.getLiveSources>) => sportsApi.getLiveSources(...args)
+export const getSources = (...args: Parameters<typeof sportsApi.getSources>) => sportsApi.getSources(...args)
 export const getStreamfreeMatches = (...args: Parameters<typeof sportsApi.getStreamfreeMatches>) => sportsApi.getStreamfreeMatches(...args)
 export const getStreamUrl = (source: string, id: string) => sportsApi.getStreamUrl(source, id)
 export const sources = sportsApi.sources

@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { Trophy, Flag, Circle, Flame } from 'lucide-react'
+import { DEFAULT_SPORTS_CATEGORIES, sportsApi } from '../../api/sports'
 
 interface SportsFiltersProps {
   selectedSport: string
@@ -6,21 +8,38 @@ interface SportsFiltersProps {
 }
 
 export default function SportsFilters({ selectedSport, onSportChange }: SportsFiltersProps) {
+  const [categories, setCategories] = useState<string[]>([...DEFAULT_SPORTS_CATEGORIES])
+
+  useEffect(() => {
+    let active = true
+    sportsApi.getCategories()
+      .then((availableCategories) => {
+        if (active) setCategories(availableCategories)
+      })
+      .catch((error: unknown) => {
+        console.error('Error fetching live sports categories:', error)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const iconForCategory = (category: string) => {
+    if (category === 'racing') return Flag
+    if (category === 'combat') return Flame
+    if (category === 'basketball' || category === 'hockey' || category === 'baseball' || category === 'tennis') {
+      return Circle
+    }
+    return Trophy
+  }
   const sports = [
     { id: 'all', name: 'All Sports', icon: Trophy },
-    { id: 'soccer', name: 'Soccer', icon: Trophy },
-    { id: 'football', name: 'Football', icon: Trophy },
-    { id: 'afl', name: 'AFL', icon: Trophy },
-    { id: 'rugby', name: 'Rugby', icon: Trophy },
-    { id: 'basketball', name: 'NBA', icon: Circle },
-    { id: 'hockey', name: 'Hockey', icon: Circle },
-    { id: 'combat', name: 'Combat', icon: Flame },
-    { id: 'baseball', name: 'Baseball', icon: Circle },
-    { id: 'ufc', name: 'UFC', icon: Flame },
-    { id: 'tennis', name: 'Tennis', icon: Circle },
-    { id: 'racing', name: 'Racing', icon: Flag },
-    { id: 'motorsports', name: 'F1', icon: Flag },
-    { id: 'cricket', name: 'Cricket', icon: Trophy },
+    ...categories.map((category) => ({
+      id: category,
+      name: category.charAt(0).toUpperCase() + category.slice(1),
+      icon: iconForCategory(category),
+    })),
   ]
 
   return (

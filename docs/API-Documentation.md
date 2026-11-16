@@ -117,6 +117,19 @@ const matches = await sportsApi.getUpcomingMatches()
 const streams = await sportsApi.getStreams('sport', 'matchId')
 ```
 
+### Live Sports Events
+
+Live events, their source variants, and category filters are loaded from the Streamfree API:
+
+```typescript
+const categories = await sportsApi.getCategories()
+const liveMatches = await sportsApi.getLiveMatches('soccer')
+const upcomingMatches = await sportsApi.getUpcomingMatches()
+const liveSources = await sportsApi.getLiveSources('ghana-vs-england')
+```
+
+Each source includes a `quality`, embed `url`, and `live` boolean. Live event cards and players use only sources where `live` is `true`; upcoming events retain all configured variants so their embeds can start when a source goes live. The player refreshes its source list every 30 seconds and embeds the source URL in an iframe without a `sandbox` attribute.
+
 ### Data Models
 
 ```typescript

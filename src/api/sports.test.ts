@@ -44,6 +44,17 @@ describe('sports API poster URLs', () => {
     expect(fallbackSportImage('unknown')).toBe('/sports-fallback.jpg')
   })
 
+  it('loads categories from the live sports API', async () => {
+    vi.resetModules()
+    const axiosGet = vi.spyOn(axios, 'get').mockResolvedValue({
+      data: { categories: ['soccer', 'basketball'] },
+    } as never)
+
+    const { sportsApi } = await import('./sports')
+    await expect(sportsApi.getCategories()).resolves.toEqual(['soccer', 'basketball'])
+    expect(axiosGet).toHaveBeenCalledWith('https://streamfree.top/api/v1/categories', { timeout: 10000 })
+  })
+
   it('loads live events from the Streamfree API and keeps only currently live sources', async () => {
     vi.resetModules()
     const axiosGet = vi.spyOn(axios, 'get').mockResolvedValue({
@@ -57,11 +68,8 @@ describe('sports API poster URLs', () => {
             stream_key: 'ghana-vs-england',
             match_timestamp: 1782244800,
             sources: [
-              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
-              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
-            ],
-            live_sources: [
-              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
+              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true },
+              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
             ],
             thumbnail_url: 'https://streamfree.top/thumbnails/soccer_ghana-vs-england',
           },
@@ -71,10 +79,9 @@ describe('sports API poster URLs', () => {
             stream_key: 'not-live-yet',
             match_timestamp: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
             sources: [
-              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/not-live-yet1080p' },
-              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/not-live-yet540p' },
+              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/not-live-yet1080p', live: false },
+              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/not-live-yet540p', live: false },
             ],
-            live_sources: [],
           },
         ],
       },
@@ -92,7 +99,7 @@ describe('sports API poster URLs', () => {
       title: 'Ghana vs England',
       sport: 'soccer',
       streamKey: 'ghana-vs-england',
-      liveSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
+      liveSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true }],
     })
   })
 
@@ -120,26 +127,30 @@ describe('sports API poster URLs', () => {
             stream_key: 'ghana-vs-england',
             match_timestamp: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
             sources: [
-              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
-              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
+              { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: false },
+              { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
             ],
-            live_sources: [],
           },
           {
             name: 'Already live',
             category: 'soccer',
             stream_key: 'already-live',
             match_timestamp: Math.floor((Date.now() - 60 * 60 * 1000) / 1000),
-            sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/already-live1080p' }],
-            live_sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/already-live1080p' }],
+            sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/already-live1080p', live: true }],
           },
           {
             name: 'Future but live',
             category: 'soccer',
             stream_key: 'future-but-live',
             match_timestamp: Math.floor((Date.now() + 60 * 60 * 1000) / 1000),
-            sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/future-but-live1080p' }],
-            live_sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/future-but-live1080p' }],
+            sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/future-but-live1080p', live: true }],
+          },
+          {
+            name: 'Scheduled without sources',
+            category: 'soccer',
+            stream_key: 'scheduled-without-sources',
+            match_timestamp: Math.floor((Date.now() + 2 * 60 * 60 * 1000) / 1000),
+            sources: [],
           },
         ],
       },
@@ -154,11 +165,16 @@ describe('sports API poster URLs', () => {
       title: 'Ghana vs England',
       streamKey: 'ghana-vs-england',
       streamSources: [
-        { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
-        { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
+        { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: false },
+        { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
       ],
     })
-    expect(upcoming[1].title).toBe('Future but live')
+    expect(upcoming[1]).toMatchObject({
+      title: 'Scheduled without sources',
+      streamKey: 'scheduled-without-sources',
+      streamSources: [],
+      liveSources: [],
+    })
   })
 
   it('fetches a stream key source list from the dedicated endpoint', async () => {
@@ -166,8 +182,10 @@ describe('sports API poster URLs', () => {
     const axiosGet = vi.spyOn(axios, 'get').mockResolvedValue({
       data: {
         stream_key: 'ghana-vs-england',
-        sources: [{ quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' }],
-        live_sources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
+        sources: [
+          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
+          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true },
+        ],
       },
     } as never)
 
@@ -179,25 +197,24 @@ describe('sports API poster URLs', () => {
       { timeout: 10000 },
     )
     expect(sources).toEqual([
-      { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
+      { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true },
     ])
   })
 
-  it('uses available variants when a stream has not gone live yet', async () => {
+  it('returns all variants for an upcoming stream', async () => {
     vi.resetModules()
     vi.spyOn(axios, 'get').mockResolvedValue({
       data: {
         stream_key: 'ghana-vs-england',
         sources: [
-          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
-          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
+          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: false },
+          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
         ],
-        live_sources: [],
       },
     } as never)
 
     const { sportsApi } = await import('./sports')
-    const sources = await sportsApi.getLiveSources('ghana-vs-england')
+    const sources = await sportsApi.getSources('ghana-vs-england')
 
     expect(sources).toHaveLength(2)
     expect(sources[0].quality).toBe('FHD')

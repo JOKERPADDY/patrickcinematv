@@ -189,9 +189,11 @@ export default function LiveMatches({ limit, sport, variant = 'live' }: LiveMatc
               {match.streamKey ? (
                 <div className="mb-3">
                   <p className="text-sm font-bold text-white truncate">{match.title}</p>
-                  {match.streamSources && (
+                  {(variant === 'upcoming' ? match.streamSources : match.liveSources) && (
                     <p className="mt-1 text-xs font-semibold text-primary">
-                      {match.streamSources.map((source) => source.quality).join(' · ')}
+                      {(variant === 'upcoming' ? match.streamSources : match.liveSources)
+                        ?.map((source) => source.quality)
+                        .join(' · ')}
                     </p>
                   )}
                 </div>

@@ -533,6 +533,22 @@ export default function Home() {
       {heroLoading ? <HeroSkeleton /> : <HeroSlider movies={featuredMovies} />}
 
       <div className="container mx-auto py-6 md:py-20 px-4 md:px-8 lg:px-16">
+        {/* Live Sports */}
+        <section className="mb-8 md:mb-12">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-primary shadow-[0_0_15px_rgba(229,9,20,0.5)] rounded-full" />
+              <h2 className="text-2xl md:text-4xl lg:text-5xl font-black text-white tracking-tighter uppercase italic">Live Sports</h2>
+            </div>
+            <Link to="/sports" className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-primary transition-colors">
+              View All
+            </Link>
+          </div>
+          <div className="rounded-[2.5rem] border border-white/5 bg-darkSurface overflow-hidden shadow-2xl">
+            <LiveMatches limit={liveMatchLimit} />
+          </div>
+        </section>
+
         {fetchError && (
           <section className="mb-16 md:mb-24">
             <div className="rounded-3xl border border-primary/20 bg-primary/10 p-8 flex flex-col gap-6 md:flex-row md:items-center md:justify-between backdrop-blur-xl">
@@ -554,7 +570,7 @@ export default function Home() {
           </section>
         )}
 
-        {/* Ranked discovery appears immediately after the hero. */}
+        {/* Ranked discovery follows Live Sports. */}
         <section className="mb-8 md:mb-12">
           <ContentCarousel
             title="Top 10 Today"
@@ -600,7 +616,7 @@ export default function Home() {
           <div className="mb-4 flex items-end justify-between">
             <div className="flex items-center gap-3">
               <div className="w-1 h-8 bg-primary shadow-[0_0_15px_rgba(229,9,20,0.5)] rounded-full" />
-              <h2 className="text-2xl font-black text-white md:text-4xl lg:text-5xl tracking-tighter uppercase italic">Kenyan Originals</h2>
+              <h2 className="text-xl font-black text-white tracking-tighter uppercase italic md:text-2xl lg:text-3xl">Kenyan Originals</h2>
             </div>
             <Link to="/kenyan-series" className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 hover:text-primary transition-colors pb-2">
               View All
@@ -627,18 +643,18 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="absolute inset-0 flex items-center justify-center bg-black/70 opacity-0 transition-opacity duration-500 group-hover/card:opacity-100 backdrop-blur-[2px]">
-                      <div className="rounded-full bg-primary p-4 shadow-[0_0_20px_rgba(229,9,20,0.5)] transform scale-75 group-hover/card:scale-100 transition-transform duration-500">
-                        <Play className="h-10 w-10 text-white" fill="currentColor" />
+                      <div className="rounded-full bg-primary p-2.5 shadow-[0_0_20px_rgba(229,9,20,0.5)] transform scale-75 group-hover/card:scale-100 transition-transform duration-500">
+                        <Play className="h-4 w-4 text-white" fill="currentColor" />
                       </div>
                     </div>
                   </div>
-                  <div className="p-4 bg-transparent">
-                    <h3 className="truncate text-base font-black text-white group-hover/card:text-primary transition-colors uppercase italic tracking-tight">{item.title}</h3>
-                    <div className="mt-2 flex items-center gap-2 opacity-60">
+                  <div className="bg-transparent p-3">
+                    <h3 className="truncate text-xs font-black text-white group-hover/card:text-primary transition-colors uppercase italic tracking-tight sm:text-sm md:text-base">{item.title}</h3>
+                    <div className="mt-1 flex items-center gap-1.5 opacity-60">
                       <Star className="h-3 w-3 fill-primary text-primary" />
-                      <span className="text-[11px] font-black italic text-white">{rating}</span>
+                      <span className="text-[11px] font-black italic text-white md:text-xs">{rating}</span>
                       <span className="w-1 h-1 rounded-full bg-white/20" />
-                      {item.year && <span className="text-[11px] font-bold text-white/70">{item.year}</span>}
+                      {item.year && <span className="text-[11px] font-bold text-white/70 md:text-xs">{item.year}</span>}
                     </div>
                   </div>
                 </>
@@ -653,7 +669,7 @@ export default function Home() {
                   {user ? (
                     <Link
                       to={`/kenyan-series/${item.id}`}
-                      className="group/card flex w-48 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/5 bg-darkSurface shadow-2xl sm:w-56 md:w-56 lg:w-52"
+                      className="group/card flex w-32 shrink-0 flex-col overflow-hidden rounded-2xl border border-white/5 bg-darkSurface shadow-2xl sm:w-36 md:w-40 xl:w-44"
                     >
                       {cardInner}
                     </Link>
@@ -669,7 +685,7 @@ export default function Home() {
                         })
                         setIsAuthModalOpen(true)
                       }}
-                      className="group/card flex w-48 shrink-0 flex-col overflow-hidden rounded-[2rem] border border-white/5 bg-darkSurface shadow-2xl sm:w-56 md:w-56 lg:w-52 text-left"
+                      className="group/card flex w-32 shrink-0 flex-col overflow-hidden rounded-2xl border border-white/5 bg-darkSurface shadow-2xl sm:w-36 md:w-40 xl:w-44 text-left"
                     >
                       {cardInner}
                     </a>
@@ -710,6 +726,7 @@ export default function Home() {
             items={[...curatedTeenRomance, ...teenRomance]}
             type="movie"
             loading={catalogLoading}
+            variant="poster"
             viewAllTo="/movies"
             carouselId={carouselId('Teen Romance')}
             {...carouselStateProps}
@@ -722,6 +739,7 @@ export default function Home() {
             items={teenRomance}
             type="movie"
             loading={catalogLoading}
+            variant="poster"
             viewAllTo="/movies"
             carouselId={carouselId('Romance')}
             {...carouselStateProps}
@@ -748,22 +766,6 @@ export default function Home() {
             carouselId={carouselId('Recommended For You')}
             carouselStateProps={carouselStateProps}
           />
-        </section>
-
-        {/* Live Sports */}
-        <section className="mb-8 md:mb-12">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-1 h-8 bg-primary shadow-[0_0_15px_rgba(229,9,20,0.5)] rounded-full" />
-              <h2 className="text-2xl md:text-4xl lg:text-5xl font-black text-white tracking-tighter uppercase italic">Live Sports</h2>
-            </div>
-            <Link to="/sports" className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-primary transition-colors">
-              View All
-            </Link>
-          </div>
-          <div className="rounded-[2.5rem] border border-white/5 bg-darkSurface overflow-hidden shadow-2xl">
-            <LiveMatches limit={liveMatchLimit} />
-          </div>
         </section>
 
         {/* Upcoming Matches */}
@@ -804,6 +806,7 @@ export default function Home() {
                 items={actionAdventure}
                 type="movie"
                 loading={catalogLoading}
+                variant="poster"
                 viewAllTo="/movies"
                 carouselId={carouselId('Action & Adventure')}
                 {...carouselStateProps}
@@ -832,6 +835,7 @@ export default function Home() {
                 items={anime}
                 type="tv"
                 loading={catalogLoading}
+                variant="poster"
                 viewAllTo="/anime"
                 carouselId={carouselId('Anime')}
                 {...carouselStateProps}

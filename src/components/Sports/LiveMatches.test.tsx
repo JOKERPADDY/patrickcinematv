@@ -76,8 +76,8 @@ describe('LiveMatches', () => {
         league: 'FIFA World Cup',
         sport: 'soccer',
         streamKey: 'ghana-vs-england',
-        streamSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
-        liveSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' }],
+        streamSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true }],
+        liveSources: [{ quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: true }],
       },
     ])
 
@@ -169,8 +169,8 @@ describe('LiveMatches', () => {
         sport: 'soccer',
         streamKey: 'ghana-vs-england',
         streamSources: [
-          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p' },
-          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p' },
+          { quality: 'FHD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england1080p', live: false },
+          { quality: 'SD', url: 'https://strmfree.st/embed/soccer/ghana-vs-england540p', live: false },
         ],
         liveSources: [],
       },

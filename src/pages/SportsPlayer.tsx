@@ -16,6 +16,8 @@ type VendorFullscreenDocument = Document & {
   msExitFullscreen?: () => Promise<void> | void
 }
 
+const SOURCE_REFRESH_INTERVAL_MS = 30_000
+
 export default function SportsPlayer() {
   if (import.meta.env.DEV) {
     console.log('[SportsPlayer] Mounting')
@@ -170,6 +172,11 @@ export default function SportsPlayer() {
     }
 
     setDirectStream(null)
+    let active = true
+    let sourceRefreshInterval: number | undefined
+    const noSourcesMessage = isUpcomingStreamfreeMatch
+      ? 'No stream sources are configured for this event yet. Please check back soon.'
+      : 'This event has no live source right now. Please try again later.'
 
     // Otherwise, fetch from sports API
     async function fetchStreams() {
@@ -187,8 +194,14 @@ export default function SportsPlayer() {
       try {
         setFetchError(null)
         setLoading(true)
-        const normalizedStreams: Stream[] = isStreamfreeMatch
-          ? (await sportsApi.getLiveSources(streamId)).map((liveSource, index) => ({
+        const streamfreeSources = isStreamfreeMatch
+          ? await sportsApi.getSources(streamId)
+          : null
+        const availableSources = isUpcomingStreamfreeMatch
+          ? streamfreeSources
+          : streamfreeSources?.filter((streamSource) => streamSource.live)
+        const normalizedStreams: Stream[] = availableSources
+          ? availableSources.map((liveSource, index) => ({
               id: `${streamId}-${liveSource.quality}-${index}`,
               streamNo: index + 1,
               language: '',
@@ -198,6 +211,7 @@ export default function SportsPlayer() {
               quality: liveSource.quality,
             }))
           : await sportsApi.getStreams(streamSource, streamId)
+        if (!active) return
         setStreams(normalizedStreams)
 
         // Auto-select best stream by health score when available
@@ -219,12 +233,49 @@ export default function SportsPlayer() {
         if (normalizedStreams.length === 0) {
           setFetchError(
             isStreamfreeMatch
-              ? 'This event has no live source right now. Please try again later.'
+              ? noSourcesMessage
               : 'No streams available for this match right now.',
           )
         }
         setLoading(false)
+
+        if (isStreamfreeMatch) {
+          sourceRefreshInterval = window.setInterval(async () => {
+            try {
+              const sources = await sportsApi.getSources(streamId)
+              if (!active) return
+
+              const playableSources = isUpcomingStreamfreeMatch
+                ? sources
+                : sources.filter((streamSource) => streamSource.live)
+              const refreshedStreams: Stream[] = playableSources.map((liveSource, index) => ({
+                id: `${streamId}-${liveSource.quality}-${index}`,
+                streamNo: index + 1,
+                language: '',
+                hd: liveSource.quality !== 'SD',
+                embedUrl: liveSource.url,
+                source: 'streamfree',
+                quality: liveSource.quality,
+              }))
+              const currentSourceUrl = iframeRef.current?.src
+              const currentSourceIndex = refreshedStreams.findIndex(
+                (stream) => stream.embedUrl === currentSourceUrl,
+              )
+
+              setStreams(refreshedStreams)
+              setSelectedStream(currentSourceIndex >= 0 ? currentSourceIndex : 0)
+              setFetchError(
+                refreshedStreams.length === 0
+                  ? noSourcesMessage
+                  : null,
+              )
+            } catch (error) {
+              console.error('Error refreshing live sports sources:', error)
+            }
+          }, SOURCE_REFRESH_INTERVAL_MS)
+        }
       } catch (error) {
+        if (!active) return
         const message = error instanceof Error ? error.message : 'Unable to fetch streams.'
         console.error('Error fetching streams:', error)
         setStreams([])
@@ -239,6 +290,10 @@ export default function SportsPlayer() {
 
     // Cleanup iframe on unmount
     return () => {
+      active = false
+      if (sourceRefreshInterval !== undefined) {
+        window.clearInterval(sourceRefreshInterval)
+      }
       if (import.meta.env.DEV) {
         console.log('[SportsPlayer] Cleaning up iframe')
       }
@@ -336,8 +391,8 @@ export default function SportsPlayer() {
           <div className="relative w-full overflow-hidden bg-black transition-all duration-300 aspect-video">
             <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between px-2 py-2 sm:px-4 sm:py-3">
               <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/90 backdrop-blur sm:px-3 sm:py-1.5 sm:text-xs">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-red-500 sm:h-2.5 sm:w-2.5" />
-                Live
+                <div className={`h-2 w-2 ${isUpcomingStreamfreeMatch ? 'bg-blue-500' : 'animate-pulse bg-red-500'} rounded-full sm:h-2.5 sm:w-2.5`} />
+                {isUpcomingStreamfreeMatch ? 'Upcoming' : 'Live'}
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative">
